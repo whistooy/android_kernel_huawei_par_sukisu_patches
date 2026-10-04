@@ -19,6 +19,7 @@ code does not transfer authorship to the repository maintainer.
 | DroidSpaces | ravindu644 and DroidSpaces contributors | Linux 4.9 container requirements and qtaguid fix |
 | NTSync | Elizabeth Figura, CodeWeavers, and WildKernels contributors | NTSync driver plus compatibility patch source |
 | Baseband Guard | vc-teahouse/Baseband-guard contributors | Optional anti-format protection with boot/recovery blocking disabled |
+| Huawei EMUI 9.1 EROFS | Huawei Technologies Co., Ltd., Gao Xiang, and Coconutat | Backported EROFS 0.5.180822.0 driver in `patches/dev/kernel/0007-par-emui91-erofs.patch` for EMUI 9.1 partition support |
 
 The Binder work is based on Android common kernel commit
 `3d5885175b90e5059a0ff3dcbe3ba93de9c8ff6f` (original upstream commit

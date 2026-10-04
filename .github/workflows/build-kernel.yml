@@ -6,11 +6,11 @@ on:
       selinux_mode:
         description: SELinux configuration
         required: true
-        default: enforcing
+        default: selinux-switchable
         type: choice
         options:
-          - enforcing
           - selinux-switchable
+          - enforcing
       enable_ksu:
         description: Pinned KernelSU with Huawei 4.9 compatibility
         required: true

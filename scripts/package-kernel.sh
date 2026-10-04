@@ -6,6 +6,7 @@ output="${2:?usage: $0 Image.gz OUTPUT.img [MKBOOTIMG]}"
 mkbootimg="${3:-${MKBOOTIMG:-}}"
 partition_size=25165824
 stock_cmdline='loglevel=4 initcall_debug=n page_tracker=on unmovable_isolate1=2:192M,3:224M,4:256M printktimer=0xfff0a000,0x534,0x538 androidboot.selinux=enforcing buildvariant=user'
+os_patch_level="${OS_PATCH_LEVEL:-2019-07-01}"
 
 die() {
   printf '%s\n' "$*" >&2
@@ -32,7 +33,7 @@ mkdir -p "$(dirname "$output")"
   --pagesize 2048 \
   --header_version 1 \
   --os_version 9.0.0 \
-  --os_patch_level 2019-04-01 \
+  --os_patch_level "$os_patch_level" \
   --output "$output"
 
 [ "$(head -c 8 "$output")" = 'ANDROID!' ] || die 'packaged image has no Android boot header'

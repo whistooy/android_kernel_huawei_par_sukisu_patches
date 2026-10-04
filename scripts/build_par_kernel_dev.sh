@@ -138,6 +138,16 @@ if [ "$enable_network" = 1 ]; then
   set_config --set-val IP_SET_MAX 65534
 fi
 
+for symbol in \
+  EROFS_FS EROFS_FS_DEBUG EROFS_FS_XATTR EROFS_FS_POSIX_ACL \
+  EROFS_FS_SECURITY EROFS_FS_USE_VM_MAP_RAM EROFS_FAULT_INJECTION \
+  EROFS_FS_ZIP EROFS_FS_ZIP_CACHE_BIPOLAR; do
+  set_config -e "$symbol"
+done
+set_config --set-val EROFS_FS_CLUSTER_PAGE_LIMIT 1
+set_config --set-val EROFS_FS_IO_MAX_RETRIES 5
+set_config -d EROFS_FS_HUAWEI_EXTENSION
+
 export PATH="$toolchain_dir/bin:$PATH"
 export ARCH=arm64
 export CROSS_COMPILE=aarch64-linux-android-
@@ -187,6 +197,10 @@ if [ "$enable_network" = 1 ]; then
     require_enabled "$symbol"
   done
 fi
+
+require_y EROFS_FS
+require_y EROFS_FS_ZIP
+require_y EROFS_FS_ZIP_CACHE_BIPOLAR
 
 make -C "$kernel_dir" O="$out_dir" -j"$jobs"
 [ -s "$out_dir/arch/arm64/boot/Image.gz" ] || die "build completed without Image.gz"

@@ -149,6 +149,9 @@ fi
 git -C "$kernel_tree" apply \
   "$repo_root/patches/dev/kernel/0001-par-ksu-susfs-4.9-compat.patch"
 
+git -C "$kernel_tree" apply \
+  "$repo_root/patches/dev/kernel/0007-par-emui91-erofs.patch"
+
 image_tag="par-kernel-dev:${GITHUB_RUN_ID:-local}-${selinux_mode}"
 docker build \
   --build-arg "BASE_IMAGE=${BASE_IMAGE:-ubuntu:20.04}" \
@@ -213,4 +216,36 @@ rm -f "$dist_dir/image-path.txt"
   sha256sum "$image_path"
 } > "$dist_dir/build-info.txt"
 
+friendly_name="KERNEL-PAR-4.9.97"
+if [ "$enable_ksu" = 1 ]; then
+  friendly_name+="-KERNELSU-${ksu_version}"
+fi
+if [ "$enable_susfs" = 1 ]; then
+  friendly_name+="-SUSFS-v2.3.0"
+fi
+if [ "$enable_rekernel" = 1 ]; then
+  friendly_name+="-REKERNEL"
+fi
+if [ "$enable_droidspaces" = 1 ]; then
+  friendly_name+="-DROIDSPACES"
+fi
+if [ "$enable_ntsync" = 1 ]; then
+  friendly_name+="-NTSYNC"
+fi
+if [ "$enable_bbg" = 1 ]; then
+  friendly_name+="-BBG"
+fi
+if [ "$enable_network" = 1 ]; then
+  friendly_name+="-NETEXT"
+fi
+case "$selinux_mode" in
+  selinux-switchable) friendly_name+="-SELINUX-SWITCHABLE" ;;
+  enforcing) friendly_name+="-ENFORCING" ;;
+esac
+friendly_name+=".img"
+
+cp "$image_path" "$dist_dir/$friendly_name"
+sha256sum "$dist_dir/$friendly_name" >> "$dist_dir/build-info.txt"
+
 printf 'development output: %s\n' "$image_path"
+printf 'friendly output: %s\n' "$dist_dir/$friendly_name"

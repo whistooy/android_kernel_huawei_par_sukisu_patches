@@ -4,3 +4,4 @@
 0004-par-droidspaces-cgroup-v1-compat.patch
 0005-par-susfs-fsnotify-4.9-compat.patch
 0006-par-hisi-pagecache-memcg-compat.patch
+0007-par-emui91-erofs.patch
