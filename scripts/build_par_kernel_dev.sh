@@ -146,7 +146,8 @@ for symbol in \
 done
 set_config --set-val EROFS_FS_CLUSTER_PAGE_LIMIT 1
 set_config --set-val EROFS_FS_IO_MAX_RETRIES 5
-set_config -d EROFS_FS_HUAWEI_EXTENSION
+set_config -e EROFS_FS_HUAWEI_EXTENSION
+set_config -d DM_VERITY_AVB
 
 export PATH="$toolchain_dir/bin:$PATH"
 export ARCH=arm64

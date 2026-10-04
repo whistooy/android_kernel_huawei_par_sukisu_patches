@@ -1,0 +1,84 @@
+diff --git a/drivers/of/base.c b/drivers/of/base.c
+index 8f48cdbf7..8dc6c898e 100644
+--- a/drivers/of/base.c
++++ b/drivers/of/base.c
+@@ -45,30 +45,59 @@ static const char *of_stdout_options;
+ 
+ struct kset *of_kset;
+ 
+-static void __init of_par_disable_first_stage_avb(const char *path)
++static void __init of_par_fixup_fstab(void)
+ {
+-	struct device_node *np;
++	struct device_node *fstab_np;
++	struct device_node *child;
+ 	struct property *prop;
+ 
+-	np = of_find_node_by_path(path);
+-	if (!np)
++	fstab_np = of_find_node_by_path("/firmware/android/fstab");
++	if (!fstab_np)
+ 		return;
+ 
+-	prop = of_find_property(np, "fsmgr_flags", NULL);
+-	if (prop && prop->value && strstr(prop->value, "avb")) {
++	for_each_child_of_node(fstab_np, child) {
++		/*
++		 * In EMUI 9.1, Huawei added preavs to the DT fstab.
++		 * It mounts to /vendor/preavs before /vendor is mounted,
++		 * uses incompatible AVB metadata, and is not needed for AOSP/GSI.
++		 * Disable it so Android first-stage init skips it completely.
++		 */
++		if (strcmp(child->name, "preavs") == 0 || strstr(child->name, "preavs")) {
++			prop = of_find_property(child, "status", NULL);
++			if (prop) {
++				prop->value = "disabled";
++				prop->length = sizeof("disabled");
++				pr_info("disabled unneeded EMUI 9.1 preavs partition in DT fstab\n");
++			}
++			prop = of_find_property(child, "dev", NULL);
++			if (prop) {
++				prop->value = "";
++				prop->length = 1;
++			}
++			prop = of_find_property(child, "fsmgr_flags", NULL);
++			if (prop) {
++				prop->value = "wait,nofail";
++				prop->length = sizeof("wait,nofail");
++			}
++			continue;
++		}
++
+ 		/*
+ 		 * The stock boot loader validates Huawei's private vbmeta format,
+ 		 * but modern AOSP libavb rejects that metadata when a custom kernel
+ 		 * changes verifiedbootstate from green to orange.  The device is
+ 		 * unlocked, so mount the immutable vendor/odm partitions directly
+ 		 * instead of attempting a second, incompatible first-stage check.
+ 		 */
+-		prop->value = "wait";
+-		prop->length = sizeof("wait");
+-		pr_info("disabled incompatible first-stage AVB flag for %s\n", path);
++		prop = of_find_property(child, "fsmgr_flags", NULL);
++		if (prop && prop->value && strstr(prop->value, "avb")) {
++			prop->value = "wait";
++			prop->length = sizeof("wait");
++			pr_info("disabled incompatible first-stage AVB flag for %s\n", child->full_name);
++		}
+ 	}
+ 
+-	of_node_put(np);
++	of_node_put(fstab_np);
+ }
+ 
+ /*
+@@ -234,8 +263,7 @@ void __init of_core_init(void)
+ 
+ 	/* Create the kset, and register existing nodes */
+ 	mutex_lock(&of_mutex);
+-	of_par_disable_first_stage_avb("/firmware/android/fstab/vendor");
+-	of_par_disable_first_stage_avb("/firmware/android/fstab/odm");
++	of_par_fixup_fstab();
+ 	of_kset = kset_create_and_add("devicetree", NULL, firmware_kobj);
+ 	if (!of_kset) {
+ 		mutex_unlock(&of_mutex);

@@ -152,6 +152,9 @@ git -C "$kernel_tree" apply \
 git -C "$kernel_tree" apply \
   "$repo_root/patches/dev/kernel/0007-par-emui91-erofs.patch"
 
+git -C "$kernel_tree" apply \
+  "$repo_root/patches/dev/kernel/0008-par-emui91-fstab-avb-fix.patch"
+
 image_tag="par-kernel-dev:${GITHUB_RUN_ID:-local}-${selinux_mode}"
 docker build \
   --build-arg "BASE_IMAGE=${BASE_IMAGE:-ubuntu:20.04}" \
