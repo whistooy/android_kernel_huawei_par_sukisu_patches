@@ -118,38 +118,6 @@ index 000000000..55a4be68e
 +#include <linux/kernel.h>
 +
 +#endif
-diff --git a/include/linux/overflow.h b/include/linux/overflow.h
-new file mode 100644
-index 000000000..6bc5f0e96
---- /dev/null
-+++ b/include/linux/overflow.h
-@@ -0,0 +1,26 @@
-+#ifndef _LINUX_OVERFLOW_H
-+#define _LINUX_OVERFLOW_H
-+
-+#include <linux/compiler.h>
-+#include <linux/kernel.h>
-+
-+#ifndef check_add_overflow
-+#define check_add_overflow(a, b, d) ({ \
-+	typeof(a) __a = (a); \
-+	typeof(b) __b = (b); \
-+	typeof(*(d)) __sum = __a + __b; \
-+	*(d) = __sum; \
-+	__sum < __a; \
-+})
-+#endif
-+
-+#ifndef array_size
-+#define array_size(a, b) ((a) * (b))
-+#endif
-+
-+#ifndef struct_size
-+#define struct_size(p, member, n) \
-+	(sizeof(*(p)) + array_size((n), sizeof(*(p)->member)))
-+#endif
-+
-+#endif
 diff --git a/include/linux/pgtable.h b/include/linux/pgtable.h
 new file mode 100644
 index 000000000..b7d2049aa

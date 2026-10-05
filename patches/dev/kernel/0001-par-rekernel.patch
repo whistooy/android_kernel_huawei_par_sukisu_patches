@@ -1,0 +1,244 @@
+diff --git a/drivers/Kconfig b/drivers/Kconfig
+index 6e7efde24..d36e1fbd0 100644
+--- a/drivers/Kconfig
++++ b/drivers/Kconfig
+@@ -263,4 +263,6 @@ source "drivers/oae_fw_patch/Kconfig"
+ 
+ source "drivers/kernelsu/Kconfig"
+ 
++
++source "drivers/rekernel/Kconfig"
+ endmenu
+diff --git a/drivers/Makefile b/drivers/Makefile
+index 911595d74..7678730a5 100644
+--- a/drivers/Makefile
++++ b/drivers/Makefile
+@@ -218,3 +218,4 @@ obj-$(CONFIG_OASES) += oases/
+ obj-$(CONFIG_OAE_FW_PATCH) += oae_fw_patch/
+ 
+ obj-y += kernelsu/
++obj-$(CONFIG_REKERNEL) += rekernel/
+diff --git a/drivers/android/binder.c b/drivers/android/binder.c
+index 8336a57ed..7b1098218 100755
+--- a/drivers/android/binder.c
++++ b/drivers/android/binder.c
+@@ -82,6 +82,9 @@
+ #define BINDER_IPC_32BIT 1
+ #endif
+ 
++#ifdef CONFIG_REKERNEL
++#include <../rekernel/rekernel.h>
++#endif /* CONFIG_REKERNEL */
+ #include <uapi/linux/android/binder.h>
+ #include "binder_alloc.h"
+ #include "binder_trace.h"
+@@ -2973,6 +2976,83 @@ static int binder_fixup_parent(struct binder_transaction *t,
+ 	return 0;
+ }
+ 
++#ifdef CONFIG_REKERNEL
++/**
++ * binder_can_update_transaction() - Can a txn be superseded by an updated one?
++ * @t1: the pending async txn in the frozen process
++ * @t2: the new async txn to supersede the outdated pending one
++ *
++ * Return:	true if t2 can supersede t1
++ *			false if t2 can not supersede t1
++ */
++static bool binder_can_update_transaction(struct binder_transaction *t1,
++						struct binder_transaction *t2)
++{
++	if ((t1->flags & t2->flags & (TF_ONE_WAY | TF_UPDATE_TXN)) != (TF_ONE_WAY | TF_UPDATE_TXN) || !t1->to_proc || !t2->to_proc)
++		return false;
++	if (t1->to_proc->tsk == t2->to_proc->tsk && t1->code == t2->code &&
++		t1->flags == t2->flags &&
++		t1->buffer->target_node->ptr == t2->buffer->target_node->ptr &&
++		t1->buffer->target_node->cookie == t2->buffer->target_node->cookie)
++		return true;
++	return false;
++}
++
++/**
++ * binder_find_outdated_transaction_ilocked() - Find the outdated transaction
++ * @t:		 new async transaction
++ * @target_list: list to find outdated transaction
++ *
++ * Return:	the outdated transaction if found
++ *			NULL if no outdated transacton can be found
++ *
++ * Requires the proc->inner_lock to be held.
++ */
++static struct binder_transaction *
++binder_find_outdated_transaction_ilocked(struct binder_transaction *t,
++					 struct list_head *target_list)
++{
++	struct binder_work *w;
++
++	list_for_each_entry(w, target_list, entry) {
++		struct binder_transaction *t_queued;
++
++		if (w->type != BINDER_WORK_TRANSACTION)
++			continue;
++		t_queued = container_of(w, struct binder_transaction, work);
++		if (binder_can_update_transaction(t_queued, t))
++			return t_queued;
++	}
++	return NULL;
++}
++#endif /* CONFIG_REKERNEL */
++
++#ifdef CONFIG_REKERNEL
++void rekernel_binder_transaction(bool reply, struct binder_transaction *t,
++			struct binder_node *target_node, struct binder_transaction_data *tr) {
++	struct binder_proc *to_proc;
++	struct binder_alloc *target_alloc;
++	if (!t->to_proc)
++		return;
++	to_proc = t->to_proc;
++
++	if (reply) {
++		binder_reply_handler(task_tgid_nr(current), current, to_proc->pid, to_proc->tsk, false, tr);
++	} else if (t->from) {
++		if (t->from->proc) {
++			binder_trans_handler(t->from->proc->pid, t->from->proc->tsk, to_proc->pid, to_proc->tsk, false, tr);
++		}
++	} else { // oneway=1
++		binder_trans_handler(task_tgid_nr(current), current, to_proc->pid, to_proc->tsk, true, tr);
++
++		target_alloc = &to_proc->alloc;
++		if (target_alloc->free_async_space < (target_alloc->buffer_size / 10 + 0x300)) {
++			binder_overflow_handler(task_tgid_nr(current), current, to_proc->pid, to_proc->tsk, true, tr);
++		}
++	}
++}
++#endif /* CONFIG_REKERNEL */
++
+ /**
+  * binder_proc_transaction() - sends a transaction to a process and wakes it up
+  * @t:		transaction to send
+@@ -2998,6 +3078,9 @@ static bool binder_proc_transaction(struct binder_transaction *t,
+ 	struct binder_priority node_prio;
+ 	bool oneway = !!(t->flags & TF_ONE_WAY);
+ 	bool pending_async = false;
++#ifdef CONFIG_REKERNEL
++	struct binder_transaction *t_outdated = NULL;
++#endif /* CONFIG_REKERNEL */
+ 
+ 	BUG_ON(!node);
+ 	binder_node_lock(node);
+@@ -3064,6 +3147,15 @@ static bool binder_proc_transaction(struct binder_transaction *t,
+ #endif
+ 	} else {
+ 		binder_enqueue_work_ilocked(&t->work, &node->async_todo);
++#ifdef CONFIG_REKERNEL
++		if ((t->flags & TF_UPDATE_TXN) && frozen_task_group(proc->tsk)) {
++			t_outdated = binder_find_outdated_transaction_ilocked(t,
++										&node->async_todo);
++			if (t_outdated) {
++				list_del_init(&t_outdated->work.entry);
++			}
++		}
++#endif /* CONFIG_REKERNEL */
+ 	}
+ 
+ 	if (!pending_async)
+@@ -3072,6 +3164,23 @@ static bool binder_proc_transaction(struct binder_transaction *t,
+ 	binder_inner_proc_unlock(proc);
+ 	binder_node_unlock(node);
+ 
++#ifdef CONFIG_REKERNEL
++	/*
++	 * To reduce potential contention, free the outdated transaction and
++	 * buffer after releasing the locks.
++	 */
++	if (t_outdated) {
++		struct binder_buffer *buffer = t_outdated->buffer;
++
++		t_outdated->buffer = NULL;
++		buffer->transaction = NULL;
++		binder_transaction_buffer_release(proc, buffer, NULL);
++		binder_alloc_free_buf(&proc->alloc, buffer);
++		kfree(t_outdated);
++		binder_stats_deleted(BINDER_STAT_TRANSACTION);
++	}
++#endif /* CONFIG_REKERNEL */
++
+ 	return true;
+ }
+ 
+@@ -3418,6 +3527,9 @@ static void binder_transaction(struct binder_proc *proc,
+ 		}
+ 	}
+ 
++#ifdef CONFIG_REKERNEL
++	rekernel_binder_transaction(reply, t, target_node, tr);
++#endif /* CONFIG_REKERNEL */
+ 	trace_binder_transaction(reply, t, target_node);
+ 
+ #ifdef CONFIG_HUAWEI_DUBAI
+diff --git a/include/uapi/linux/android/binder.h b/include/uapi/linux/android/binder.h
+index 0631c5007..95a1bc372 100644
+--- a/include/uapi/linux/android/binder.h
++++ b/include/uapi/linux/android/binder.h
+@@ -294,6 +294,7 @@ enum transaction_flags {
+ 	TF_ROOT_OBJECT	= 0x04,	/* contents are the component's root object */
+ 	TF_STATUS_CODE	= 0x08,	/* contents are a 32-bit status code */
+ 	TF_ACCEPT_FDS	= 0x10,	/* allow replies with file descriptors */
++	TF_UPDATE_TXN	= 0x40,	/* update the last pending async transaction */
+ };
+ 
+ struct binder_transaction_data {
+diff --git a/kernel/signal.c b/kernel/signal.c
+index 925a9f78c..eb84bac48 100755
+--- a/kernel/signal.c
++++ b/kernel/signal.c
+@@ -43,6 +43,10 @@
+ #include <asm/unistd.h>
+ #include <asm/siginfo.h>
+ #include <asm/cacheflush.h>
++#ifdef CONFIG_REKERNEL
++#include <uapi/asm/signal.h>
++#include <../drivers/rekernel/rekernel.h>
++#endif /* CONFIG_REKERNEL */
+ #include "audit.h"	/* audit_signal_info() */
+ 
+ #ifdef CONFIG_HUAWEI_KSTATE
+@@ -1174,6 +1178,10 @@ int do_send_sig_info(int sig, struct siginfo *info, struct task_struct *p,
+ {
+ 	unsigned long flags;
+ 	int ret = -ESRCH;
++#ifdef CONFIG_REKERNEL
++	if (sig == SIGKILL || sig == SIGTERM || sig == SIGABRT || sig == SIGQUIT)
++		rekernel_report(SIGNAL, sig, task_tgid_nr(current), current, task_tgid_nr(p), p, false, NULL);
++#endif /* CONFIG_REKERNEL */
+ 
+ #ifdef CONFIG_HUAWEI_KSTATE
+ 	if (sig == SIGKILL || sig == SIGTERM || sig == SIGABRT || sig == SIGQUIT)
+diff --git a/drivers/rekernel/rekernel.h b/drivers/rekernel/rekernel.h
+--- a/drivers/rekernel/rekernel.h
++++ b/drivers/rekernel/rekernel.h
+@@ -19,11 +19,8 @@
+ 	OVERFLOW,
+ };
+ 
+-static inline bool jobctl_frozen(struct task_struct* task) {
+-	return ((task->jobctl & JOBCTL_TRAP_FREEZE) != 0);
+-}
+ static inline bool frozen_task_group(struct task_struct* task) {
+-	return (jobctl_frozen(task) || cgroup_freezing(task));
++	return frozen(task->group_leader) || freezing(task->group_leader);
+ }
+ 
+ extern void rekernel_report(int reporttype, int type, pid_t src_pid, struct task_struct* src, pid_t dst_pid, struct task_struct* dst, bool oneway, struct binder_transaction_data* tr);
+diff --git a/drivers/rekernel/rekernel.c b/drivers/rekernel/rekernel.c
+--- a/drivers/rekernel/rekernel.c
++++ b/drivers/rekernel/rekernel.c
+@@ -182,7 +182,7 @@ int register_netfilter(void) {
+ 	return LINE_SUCCESS;
+ }
+ #endif /* CONFIG_REKERNEL_NETWORK */
+-struct netlink_kernel_cfg cfg = {
++static struct netlink_kernel_cfg cfg = {
+ 	.input = netlink_rcv_msg, // set recv callback
+ };
+ #ifdef CONFIG_PROC_FS

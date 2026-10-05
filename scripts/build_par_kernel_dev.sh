@@ -148,6 +148,8 @@ set_config --set-val EROFS_FS_CLUSTER_PAGE_LIMIT 1
 set_config --set-val EROFS_FS_IO_MAX_RETRIES 5
 set_config -e EROFS_FS_HUAWEI_EXTENSION
 set_config -d DM_VERITY_AVB
+set_config -e ALLOC_MEM_SUPPORT_4GPLUS
+set_config --set-str MALI_PLATFORM_NAME "hisilicon"
 
 export PATH="$toolchain_dir/bin:$PATH"
 export ARCH=arm64
@@ -155,7 +157,7 @@ export CROSS_COMPILE=aarch64-linux-android-
 export KBUILD_BUILD_USER=android
 export KBUILD_BUILD_HOST=android-build
 
-make -C "$kernel_dir" O="$out_dir" olddefconfig
+make -C "$kernel_dir" O="$out_dir" HOSTCFLAGS="-fcommon" olddefconfig
 
 if [ "$enable_ksu" = 1 ]; then require_y KSU; else require_disabled KSU; fi
 if [ "$enable_susfs" = 1 ]; then require_y KSU_SUSFS; else require_disabled KSU_SUSFS; fi
@@ -202,8 +204,9 @@ fi
 require_y EROFS_FS
 require_y EROFS_FS_ZIP
 require_y EROFS_FS_ZIP_CACHE_BIPOLAR
+require_y ALLOC_MEM_SUPPORT_4GPLUS
 
-make -C "$kernel_dir" O="$out_dir" -j"$jobs"
+make -C "$kernel_dir" O="$out_dir" HOSTCFLAGS="-fcommon" -j"$jobs"
 [ -s "$out_dir/arch/arm64/boot/Image.gz" ] || die "build completed without Image.gz"
 
 feature_tag="ksu${enable_ksu}-susfs${enable_susfs}-rk${enable_rekernel}-rkn${enable_rekernel_network}"

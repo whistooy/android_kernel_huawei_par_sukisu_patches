@@ -1,12 +1,11 @@
 # Huawei nova 3 (PAR) kernel patches
 
 Source patches and GitHub Actions builds for the Huawei nova 3 (`PAR`) on the
-LineageOS Kirin 970 Linux 4.9.97 kernel base. The target system is Android 13
-on an EMUI 9 firmware base.
+Coconutat Kirin 970 Linux 4.9.148 (EMUI 9.1) kernel base. The target system is
+Android 13 on an EMUI 9.1 firmware base.
 
 This branch provides a selectable feature builder using device-tested, pinned
-upstream revisions. It uses KernelSU 32629 and SuSFS 2.3.0. KPM is not
-included.
+upstream revisions. It uses KernelSU and SuSFS 2.3.0. KPM is not included.
 
 ## Disclaimer
 
@@ -18,9 +17,9 @@ device-recovery support is provided.
 ## Compatibility
 
 - Device: Huawei nova 3 (`PAR`).
-- Firmware base: EMUI 9.
+- Firmware base: EMUI 9.1.
 - Android target: Android 13.
-- Kernel: Linux 4.9.97.
+- Kernel: Linux 4.9.148.
 
 Other devices and other major firmware bases are unsupported.
 
@@ -74,6 +73,7 @@ their original terms, including the separate SuSFS GPL-3.0-or-later scope; see
 
 ## Acknowledgements
 
+- [Coconutat/android_kernel_huawei_kirin970_EMUI9.1.0_KernelSU](https://github.com/Coconutat/android_kernel_huawei_kirin970_EMUI9.1.0_KernelSU) — EMUI 9.1 Linux 4.9.148 kernel base for this branch.
 - [LineageOS/android_kernel_huawei_kirin970](https://github.com/LineageOS/android_kernel_huawei_kirin970)
 - [SukiSU Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra)
 - [KernelSU](https://github.com/tiann/KernelSU)

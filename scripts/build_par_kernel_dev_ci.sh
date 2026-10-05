@@ -86,13 +86,11 @@ fetch_revision "$(state_value toolchain_url)" "$(state_value toolchain_commit)" 
 fetch_revision "$(state_value susfs_dev_url)" "$(state_value susfs_dev_commit)" "$susfs_tree"
 
 apply_series "$kernel_tree" "$repo_root/patches/kernel/series"
-git -C "$kernel_tree" apply \
-  "$repo_root/patches/dev/kernel/0006-par-hisi-pagecache-memcg-compat.patch"
 cp "$susfs_tree/kernel_patches/fs/susfs.c" "$kernel_tree/fs/susfs.c"
 cp "$susfs_tree/kernel_patches/include/linux/susfs.h" "$kernel_tree/include/linux/susfs.h"
 cp "$susfs_tree/kernel_patches/include/linux/susfs_def.h" "$kernel_tree/include/linux/susfs_def.h"
 git -C "$kernel_tree" apply \
-  "$repo_root/patches/dev/kernel/0005-par-susfs-fsnotify-4.9-compat.patch"
+  "$repo_root/patches/dev/kernel/0004-par-susfs-fsnotify-4.9-compat.patch"
 
 if [ "$enable_ksu" = 1 ]; then
   # KernelSU derives its internal version from the complete reachable commit
@@ -111,17 +109,14 @@ fi
 
 if [ "$enable_rekernel" = 1 ]; then
   fetch_revision "$(state_value rekernel_url)" "$(state_value rekernel_commit)" "$rekernel_tree"
-  placeholder="$kernel_tree/arch/arm64/configs/defconfig"
-  [ -e "$placeholder" ] || : > "$placeholder"
-  (cd "$kernel_tree" && bash "$rekernel_tree/Integrate/patches.sh")
-  rm -f "$placeholder"
+  cp -r "$rekernel_tree/Integrate/rekernel" "$kernel_tree/drivers/"
+  git -C "$kernel_tree" apply \
+    "$repo_root/patches/dev/kernel/0001-par-rekernel.patch"
   [ -f "$kernel_tree/drivers/rekernel/rekernel.c" ] || die "Re-Kernel integration failed"
   grep -q 'CONFIG_REKERNEL' "$kernel_tree/drivers/android/binder.c" ||
     die "Re-Kernel Binder integration failed"
   grep -q 'CONFIG_REKERNEL' "$kernel_tree/kernel/signal.c" ||
     die "Re-Kernel signal integration failed"
-  git -C "$kernel_tree" apply \
-    "$repo_root/patches/dev/kernel/0002-par-rekernel-4.9-compat.patch"
 fi
 
 if [ "$enable_droidspaces" = 1 ]; then
@@ -129,7 +124,7 @@ if [ "$enable_droidspaces" = 1 ]; then
   git -C "$kernel_tree" apply \
     "$droidspaces_tree/Documentation/resources/kernel-patches/non-GKI/01.fix_kernel_panic_in_xt_qtaguid.patch"
   git -C "$kernel_tree" apply \
-    "$repo_root/patches/dev/kernel/0004-par-droidspaces-cgroup-v1-compat.patch"
+    "$repo_root/patches/dev/kernel/0002-par-droidspaces-cgroup-v1-compat.patch"
 fi
 
 if [ "$enable_ntsync" = 1 ]; then
@@ -147,13 +142,7 @@ if [ "$enable_bbg" = 1 ]; then
 fi
 
 git -C "$kernel_tree" apply \
-  "$repo_root/patches/dev/kernel/0001-par-ksu-susfs-4.9-compat.patch"
-
-git -C "$kernel_tree" apply \
-  "$repo_root/patches/dev/kernel/0007-par-emui91-erofs.patch"
-
-git -C "$kernel_tree" apply \
-  "$repo_root/patches/dev/kernel/0008-par-emui91-fstab-avb-fix.patch"
+  "$repo_root/patches/dev/kernel/0005-par-hisi-pagecache-memcg-compat.patch"
 
 image_tag="par-kernel-dev:${GITHUB_RUN_ID:-local}-${selinux_mode}"
 docker build \
@@ -219,7 +208,7 @@ rm -f "$dist_dir/image-path.txt"
   sha256sum "$image_path"
 } > "$dist_dir/build-info.txt"
 
-friendly_name="KERNEL-PAR-4.9.97"
+friendly_name="KERNEL-PAR-4.9.148"
 if [ "$enable_ksu" = 1 ]; then
   friendly_name+="-KERNELSU-${ksu_version}"
 fi

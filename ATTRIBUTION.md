@@ -7,7 +7,8 @@ code does not transfer authorship to the repository maintainer.
 
 | Area | Upstream author or project | Use in this repository |
 | --- | --- | --- |
-| Linux 4.9.97 Kirin 970 base | LineageOS and Huawei kernel contributors | Exact base revision recorded in `SOURCE_STATE` |
+| Linux 4.9.148 Kirin 970 EMUI 9.1 base | Huawei, Coconut (`Coconutat`) and Linux contributors | [Coconutat kernel repository](https://github.com/Coconutat/android_kernel_huawei_kirin970_EMUI9.1.0_KernelSU), pinned at `621088affb880d53f4dcf1d8a42741ba52dbc87e` in `SOURCE_STATE` |
+| Original Linux 4.9.97 baseline | LineageOS and Huawei kernel contributors | Base of the original PAR patches before the EMUI 9.1 migration |
 | SukiSU Ultra 4.1.3 | ShirkNeko and SukiSU Ultra contributors | Root implementation at pinned commit `b1d534bc41941b2c818d7a1a1dac341e4aabfc2d` |
 | SuSFS 2.2.0 | simonpunk and SuSFS contributors | Filesystem-hiding implementation at pinned commit `ee7dc7a03b7c836952cce55c5f3834de62a465d1` |
 | Huawei Linux 4.9 SuSFS/KPM backport | Coconut (`Coconutat`) | Starting point for the legacy-kernel and Huawei compatibility portions of `patches/kernel/0001-par-android13-sukisu-susfs2.patch`; the released config still disables KPM |
