@@ -3163,30 +3163,10 @@ index b8898824d..a8606c97e 100644
  	audit_log_format(ab, " tclass=%s", secclass_map[tclass-1].name);
  }
 diff --git a/security/selinux/include/objsec.h b/security/selinux/include/objsec.h
-index 43535cdd4..677ea4fcb 100644
+index 43535cdd4..2f6bf01aa 100644
 --- a/security/selinux/include/objsec.h
 +++ b/security/selinux/include/objsec.h
-@@ -27,6 +27,9 @@
- #include <net/net_namespace.h>
- #include "flask.h"
- #include "avc.h"
-+#ifndef BBG_USE_DEFINE_LSM
-+#include "bbg_tracing.h"
-+#endif
- 
- struct task_security_struct {
- 	u32 osid;		/* SID prior to last execve */
-@@ -35,6 +38,9 @@ struct task_security_struct {
- 	u32 create_sid;		/* fscreate SID */
- 	u32 keycreate_sid;	/* keycreate SID */
- 	u32 sockcreate_sid;	/* fscreate SID */
-+#ifndef BBG_USE_DEFINE_LSM
-+	struct bbg_cred_security_struct  bbg_cred; /* bbg cred security */
-+#endif
- };
- 
- enum label_initialized {
-@@ -134,4 +140,14 @@ struct bpf_security_struct {
+@@ -134,4 +134,14 @@ struct bpf_security_struct {
  
  extern unsigned int selinux_checkreqprot;
  
