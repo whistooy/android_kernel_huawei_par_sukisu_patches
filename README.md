@@ -50,6 +50,12 @@ All upstream inputs are fetched at the exact revisions recorded in
 [`SOURCE_STATE`](SOURCE_STATE). The resolved revisions used by each build are
 also recorded in the artifact's `build-info.txt`.
 
+This branch uses an Ubuntu 26.04 runner and builds inside the same Ubuntu 26.04
+Docker environment used by the local default backend. The container provides
+Python 3; the kernel cross-compiler remains the pinned GCC 4.9 revision used for
+the validated local build. The updated container environment still needs a
+successful build; local host validation does not establish that Actions passes.
+
 ## Important notes
 
 - The new upstream already provides EROFS, Binder security contexts and the
@@ -73,7 +79,11 @@ BUILD_BACKEND=host JOBS=4 scripts/build_par_kernel_dev_ci.sh \
   selinux-switchable /absolute/path/to/empty-build-directory
 ```
 
-Docker is the default backend. `SOURCE_CACHE_DIR` may point to local Git clones
+Without `BUILD_BACKEND=host`, the script defaults to the Ubuntu 26.04 Docker
+environment in `docker/Dockerfile.par-kernel-ubuntu26`. It installs Python 3 and
+sets `python` to Python 3 through `python-is-python3`. Both backends use the same
+pinned GCC 4.9 cross-compiler. Actions and the local Docker backend both use
+Ubuntu’s packaged Python 3. `SOURCE_CACHE_DIR` may point to local Git clones
 (named `kernel`, `toolchain`, and dependency names); only pinned committed files
 are checked out. `PREPARE_ONLY=1` stops after source preparation.
 `CONFIG_ONLY=1` on `build_par_kernel_dev.sh` validates configuration without

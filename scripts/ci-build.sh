@@ -52,11 +52,11 @@ fetch_commit "$(state_value toolchain_url)" "$toolchain_commit" "$toolchain_tree
 
 image_tag="par-kernel-ci:${GITHUB_RUN_ID:-local}-${config_name}"
 docker build \
-  --build-arg "BASE_IMAGE=${BASE_IMAGE:-ubuntu:20.04}" \
+  --build-arg "BASE_IMAGE=${BASE_IMAGE:-ubuntu:26.04}" \
   --build-arg "USER_ID=$(id -u)" \
   --build-arg "GROUP_ID=$(id -g)" \
   -t "$image_tag" \
-  -f "$repo_root/docker/Dockerfile.par-kernel-ubuntu20" \
+  -f "$repo_root/docker/Dockerfile.par-kernel-ubuntu26" \
   "$repo_root/docker"
 
 mkdir -p "$out_dir" "$dist_dir"
