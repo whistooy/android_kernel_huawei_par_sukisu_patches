@@ -138,6 +138,19 @@ if [ "$enable_network" = 1 ]; then
   set_config --set-val IP_SET_MAX 65534
 fi
 
+# Device support provided by the pinned Nova3 EMUI9.1/HarmonyOS source.
+for symbol in EROFS_FS EROFS_FS_XATTR EROFS_FS_POSIX_ACL EROFS_FS_SECURITY \
+  EROFS_FS_ZIP EROFS_FS_ZIP_CACHE_BIPOLAR EROFS_FS_HUAWEI_EXTENSION \
+  PAR_GSI_FSTAB ALLOC_MEM_SUPPORT_4GPLUS; do
+  set_config -e "$symbol"
+done
+# Preserve the original root/policy integration: these Huawei protections
+# select PMALLOC back on and prevent the pinned KernelSU policy updates.
+set_config -d HISI_SELINUX_PROT -d HISI_SELINUX_EBITMAP_RO -d HISI_RO_LSM_HOOKS
+set_config -d HISI_PMALLOC
+set_config -d DM_VERITY_AVB
+set_config --set-str MALI_PLATFORM_NAME "hisilicon"
+
 export PATH="$toolchain_dir/bin:$PATH"
 export ARCH=arm64
 export CROSS_COMPILE=aarch64-linux-android-
@@ -186,6 +199,24 @@ if [ "$enable_network" = 1 ]; then
     IP6_NF_TARGET_MASQUERADE; do
     require_enabled "$symbol"
   done
+fi
+
+for symbol in EROFS_FS EROFS_FS_ZIP PAR_GSI_FSTAB ALLOC_MEM_SUPPORT_4GPLUS; do
+  require_y "$symbol"
+done
+require_disabled DM_VERITY_AVB
+for symbol in HISI_SELINUX_PROT HISI_SELINUX_EBITMAP_RO HISI_RO_LSM_HOOKS HISI_PMALLOC; do
+  require_disabled "$symbol"
+done
+if [ "$selinux_mode" = enforcing ]; then
+  require_disabled SECURITY_SELINUX_DEVELOP
+else
+  require_y SECURITY_SELINUX_DEVELOP
+fi
+
+if [ "${CONFIG_ONLY:-0}" = 1 ]; then
+  printf 'validated config: %s\n' "$out_dir/.config"
+  exit 0
 fi
 
 make -C "$kernel_dir" O="$out_dir" -j"$jobs"

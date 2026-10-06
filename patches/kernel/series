@@ -1,2 +1,4 @@
 0001-par-android13-sukisu-susfs2.patch
-0002-kirin970-vdec-keep-protected-smr-in-secure-world.patch
+0003-par-gsi-dt-fstab.patch
+0004-par-cfc-python3.patch
+0005-dtc-host-gcc10.patch

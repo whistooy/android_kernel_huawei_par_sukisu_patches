@@ -32,21 +32,31 @@ normalize_bool() {
   esac
 }
 
-fetch_revision() {
-  local url=$1 revision=$2 destination=$3
-  git init -q "$destination"
-  git -C "$destination" remote add origin "$url"
-  git -C "$destination" fetch -q --depth=1 origin "$revision"
-  git -C "$destination" checkout -q --detach FETCH_HEAD
+# Optional Git-object cache. Only pinned committed files enter the build tree.
+fetch_pinned() {
+  local url=$1 revision=$2 destination=$3 history=$4
+  local cached="${SOURCE_CACHE_DIR:-}/${destination##*/}"
+  if [ -n "${SOURCE_CACHE_DIR:-}" ] && git -C "$cached" cat-file -e "$revision^{commit}" 2>/dev/null; then
+    git clone -q --shared --no-checkout "$cached" "$destination"
+    git -C "$destination" remote set-url origin "$url"
+    git -C "$destination" checkout -q --detach "$revision"
+  else
+    git init -q "$destination"
+    git -C "$destination" remote add origin "$url"
+    if [ "$history" = full ]; then
+      git -C "$destination" fetch -q --filter=blob:none origin "$revision"
+    else
+      git -C "$destination" fetch -q --depth=1 origin "$revision"
+    fi
+    git -C "$destination" checkout -q --detach FETCH_HEAD
+  fi
+  if [ "$history" = full ] && [ "$(git -C "$destination" rev-parse --is-shallow-repository)" = true ]; then
+    git -C "$destination" fetch -q --unshallow origin "$revision"
+  fi
+  [ "$(git -C "$destination" rev-parse HEAD)" = "$revision" ] || die "revision mismatch: $destination"
 }
-
-fetch_revision_with_history() {
-  local url=$1 revision=$2 destination=$3
-  git init -q "$destination"
-  git -C "$destination" remote add origin "$url"
-  git -C "$destination" fetch -q --filter=blob:none origin "$revision"
-  git -C "$destination" checkout -q --detach FETCH_HEAD
-}
+fetch_revision() { fetch_pinned "$1" "$2" "$3" shallow; }
+fetch_revision_with_history() { fetch_pinned "$1" "$2" "$3" full; }
 
 apply_series() {
   local tree=$1 series=$2
@@ -86,6 +96,10 @@ fetch_revision "$(state_value toolchain_url)" "$(state_value toolchain_commit)" 
 fetch_revision "$(state_value susfs_dev_url)" "$(state_value susfs_dev_commit)" "$susfs_tree"
 
 apply_series "$kernel_tree" "$repo_root/patches/kernel/series"
+# These newer include paths are used by both KernelSU and NTSync. They must
+# not disappear when the user disables NTSync.
+git -C "$kernel_tree" apply \
+  "$repo_root/patches/dev/kernel/0008-par-common-4.9-headers.patch"
 git -C "$kernel_tree" apply \
   "$repo_root/patches/dev/kernel/0006-par-hisi-pagecache-memcg-compat.patch"
 cp "$susfs_tree/kernel_patches/fs/susfs.c" "$kernel_tree/fs/susfs.c"
@@ -107,14 +121,19 @@ if [ "$enable_ksu" = 1 ]; then
     "$susfs_tree/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch"
   apply_series "$ksu_tree" "$repo_root/patches/dev/kernelsu/series"
   ln -s ../../deps/kernelsu/kernel "$kernel_tree/drivers/kernelsu"
+else
+  mkdir -p "$kernel_tree/drivers/kernelsu"
+  : > "$kernel_tree/drivers/kernelsu/Kconfig"
 fi
 
 if [ "$enable_rekernel" = 1 ]; then
   fetch_revision "$(state_value rekernel_url)" "$(state_value rekernel_commit)" "$rekernel_tree"
-  placeholder="$kernel_tree/arch/arm64/configs/defconfig"
-  [ -e "$placeholder" ] || : > "$placeholder"
-  (cd "$kernel_tree" && bash "$rekernel_tree/Integrate/patches.sh")
-  rm -f "$placeholder"
+  # The generic injector assumes a single proc->todo enqueue; Huawei's
+  # foreground Binder queue has two. Keep the original dependency and apply
+  # an explicit integration reviewed against the pinned Huawei Binder.
+  cp -a "$rekernel_tree/Integrate/rekernel" "$kernel_tree/drivers/rekernel"
+  git -C "$kernel_tree" apply \
+    "$repo_root/patches/dev/kernel/0007-par-rekernel-binder-integration.patch"
   [ -f "$kernel_tree/drivers/rekernel/rekernel.c" ] || die "Re-Kernel integration failed"
   grep -q 'CONFIG_REKERNEL' "$kernel_tree/drivers/android/binder.c" ||
     die "Re-Kernel Binder integration failed"
@@ -149,6 +168,21 @@ fi
 git -C "$kernel_tree" apply \
   "$repo_root/patches/dev/kernel/0001-par-ksu-susfs-4.9-compat.patch"
 
+if [ "${PREPARE_ONLY:-0}" = 1 ]; then
+  printf 'prepared pinned sources: %s\n' "$work_root"
+  exit 0
+fi
+
+case "${BUILD_BACKEND:-docker}" in
+host)
+  env REPO_ROOT="$repo_root" KERNEL_DIR="$kernel_tree" OUT_DIR="$work_root/out" \
+    DIST_DIR="$dist_dir" TOOLCHAIN_DIR="$toolchain_tree" SELINUX_MODE="$selinux_mode" \
+    ENABLE_KSU="$enable_ksu" ENABLE_SUSFS="$enable_susfs" ENABLE_REKERNEL="$enable_rekernel" \
+    ENABLE_REKERNEL_NETWORK="$enable_rekernel_network" ENABLE_NETWORK="$enable_network" \
+    ENABLE_DROIDSPACES="$enable_droidspaces" ENABLE_NTSYNC="$enable_ntsync" \
+    ENABLE_BBG="$enable_bbg" JOBS="${JOBS:-$(nproc)}" bash "$repo_root/scripts/build_par_kernel_dev.sh"
+  ;;
+docker)
 image_tag="par-kernel-dev:${GITHUB_RUN_ID:-local}-${selinux_mode}"
 docker build \
   --build-arg "BASE_IMAGE=${BASE_IMAGE:-ubuntu:20.04}" \
@@ -175,6 +209,10 @@ docker run --rm \
   --env "JOBS=${JOBS:-$(nproc)}" \
   "$image_tag" \
   /repo/scripts/build_par_kernel_dev.sh
+
+  ;;
+*) die "unknown BUILD_BACKEND: ${BUILD_BACKEND}" ;;
+esac
 
 image_path="$(cat "$dist_dir/image-path.txt")"
 case "$image_path" in
@@ -212,5 +250,12 @@ rm -f "$dist_dir/image-path.txt"
   printf 'network_unsupported=CAKE,FQ_PIE,IP_SET_HASH_IPMAC\n'
   sha256sum "$image_path"
 } > "$dist_dir/build-info.txt"
+
+cp "$work_root/out/.config" "$dist_dir/kernel.config"
+cp "$state_file" "$dist_dir/SOURCE_STATE"
+(
+  cd "$repo_root"
+  find SOURCE_STATE configs patches scripts -type f -print0 | sort -z | xargs -0 sha256sum
+) > "$dist_dir/build-inputs.sha256"
 
 printf 'development output: %s\n' "$image_path"

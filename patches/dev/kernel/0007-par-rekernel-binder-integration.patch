@@ -1,0 +1,203 @@
+diff --git a/drivers/Kconfig b/drivers/Kconfig
+index 38a9467..0306b4d 100644
+--- a/drivers/Kconfig
++++ b/drivers/Kconfig
+@@ -265,4 +265,6 @@ source "drivers/oae_fw_patch/Kconfig"
+ 
+ source "drivers/kernelsu/Kconfig"
+ 
++source "drivers/rekernel/Kconfig"
++
+ endmenu
+diff --git a/drivers/Makefile b/drivers/Makefile
+index 7f4d4b8..f44a96b 100644
+--- a/drivers/Makefile
++++ b/drivers/Makefile
+@@ -221,3 +221,5 @@ obj-$(CONFIG_OAE_FW_PATCH) += oae_fw_patch/
+ obj-$(CONFIG_HW_RECLAIM_ACCT) += reclaim_acct/
+ 
+ obj-$(CONFIG_KSU) += kernelsu/
++
++obj-$(CONFIG_REKERNEL) += rekernel/
+diff --git a/drivers/android/binder.c b/drivers/android/binder.c
+index 5e5d8c2..a360862 100644
+--- a/drivers/android/binder.c
++++ b/drivers/android/binder.c
+@@ -82,6 +82,9 @@
+ #define BINDER_IPC_32BIT 1
+ #endif
+ 
++#ifdef CONFIG_REKERNEL
++#include "../rekernel/rekernel.h"
++#endif
+ #include <uapi/linux/android/binder.h>
+ #include "binder_alloc.h"
+ #include "binder_trace.h"
+@@ -2952,6 +2955,84 @@ static int binder_fixup_parent(struct binder_transaction *t,
+ 	return 0;
+ }
+ 
++#ifdef CONFIG_REKERNEL
++/**
++ * binder_can_update_transaction() - Can a txn be superseded by an updated one?
++ * @t1: the pending async txn in the frozen process
++ * @t2: the new async txn to supersede the outdated pending one
++ *
++ * Return:	true if t2 can supersede t1
++ *			false if t2 can not supersede t1
++ */
++static bool binder_can_update_transaction(struct binder_transaction *t1,
++						struct binder_transaction *t2)
++{
++	if ((t1->flags & t2->flags & (TF_ONE_WAY | TF_UPDATE_TXN)) != (TF_ONE_WAY | TF_UPDATE_TXN) || !t1->to_proc || !t2->to_proc)
++		return false;
++	if (t1->to_proc->tsk == t2->to_proc->tsk && t1->code == t2->code &&
++		t1->flags == t2->flags &&
++		t1->buffer->target_node->ptr == t2->buffer->target_node->ptr &&
++		t1->buffer->target_node->cookie == t2->buffer->target_node->cookie)
++		return true;
++	return false;
++}
++
++/**
++ * binder_find_outdated_transaction_ilocked() - Find the outdated transaction
++ * @t:		 new async transaction
++ * @target_list: list to find outdated transaction
++ *
++ * Return:	the outdated transaction if found
++ *			NULL if no outdated transacton can be found
++ *
++ * Requires the proc->inner_lock to be held.
++ */
++static struct binder_transaction *
++binder_find_outdated_transaction_ilocked(struct binder_transaction *t,
++					 struct list_head *target_list)
++{
++	struct binder_work *w;
++
++	list_for_each_entry(w, target_list, entry) {
++		struct binder_transaction *t_queued;
++
++		if (w->type != BINDER_WORK_TRANSACTION)
++			continue;
++		t_queued = container_of(w, struct binder_transaction, work);
++		if (binder_can_update_transaction(t_queued, t))
++			return t_queued;
++	}
++	return NULL;
++}
++#endif /* CONFIG_REKERNEL */
++
++#ifdef CONFIG_REKERNEL
++static void rekernel_binder_transaction(bool reply, struct binder_transaction *t,
++                                       struct binder_transaction_data *tr)
++{
++	struct binder_proc *to_proc = t->to_proc;
++	struct binder_alloc *target_alloc;
++
++	if (!to_proc)
++		return;
++	if (reply) {
++		binder_reply_handler(task_tgid_nr(current), current, to_proc->pid,
++				     to_proc->tsk, false, tr);
++	} else if (t->from) {
++		if (t->from->proc)
++			binder_trans_handler(t->from->proc->pid, t->from->proc->tsk,
++					     to_proc->pid, to_proc->tsk, false, tr);
++	} else {
++		binder_trans_handler(task_tgid_nr(current), current, to_proc->pid,
++				     to_proc->tsk, true, tr);
++		target_alloc = &to_proc->alloc;
++		if (target_alloc->free_async_space < target_alloc->buffer_size / 10 + 0x300)
++			binder_overflow_handler(task_tgid_nr(current), current,
++						to_proc->pid, to_proc->tsk, true, tr);
++	}
++}
++#endif /* CONFIG_REKERNEL */
++
+ /**
+  * binder_proc_transaction() - sends a transaction to a process and wakes it up
+  * @t:		transaction to send
+@@ -2977,6 +3058,9 @@ static bool binder_proc_transaction(struct binder_transaction *t,
+ 	struct binder_priority node_prio;
+ 	bool oneway = !!(t->flags & TF_ONE_WAY);
+ 	bool pending_async = false;
++#ifdef CONFIG_REKERNEL
++	struct binder_transaction *t_outdated = NULL;
++#endif
+ 
+ 	BUG_ON(!node);
+ 	binder_node_lock(node);
+@@ -3042,6 +3126,14 @@ static bool binder_proc_transaction(struct binder_transaction *t,
+ 		binder_enqueue_work_ilocked(&t->work, &proc->todo);
+ #endif
+ 	} else {
++#ifdef CONFIG_REKERNEL
++		if ((t->flags & TF_UPDATE_TXN) && frozen_task_group(proc->tsk)) {
++			t_outdated = binder_find_outdated_transaction_ilocked(t,
++								 &node->async_todo);
++			if (t_outdated)
++				list_del_init(&t_outdated->work.entry);
++		}
++#endif
+ 		binder_enqueue_work_ilocked(&t->work, &node->async_todo);
+ 	}
+ 
+@@ -3051,6 +3143,19 @@ static bool binder_proc_transaction(struct binder_transaction *t,
+ 	binder_inner_proc_unlock(proc);
+ 	binder_node_unlock(node);
+ 
++#ifdef CONFIG_REKERNEL
++	/* Release the superseded async buffer after dropping the Binder locks. */
++	if (t_outdated) {
++		struct binder_buffer *buffer = t_outdated->buffer;
++
++		t_outdated->buffer = NULL;
++		buffer->transaction = NULL;
++		binder_transaction_buffer_release(proc, buffer, NULL);
++		binder_alloc_free_buf(&proc->alloc, buffer);
++		kfree(t_outdated);
++		binder_stats_deleted(BINDER_STAT_TRANSACTION);
++	}
++#endif
+ 	return true;
+ }
+ 
+@@ -3397,6 +3502,10 @@ static void binder_transaction(struct binder_proc *proc,
+ 		}
+ 	}
+ 
++
++#ifdef CONFIG_REKERNEL
++	rekernel_binder_transaction(reply, t, tr);
++#endif
+ 	trace_binder_transaction(reply, t, target_node);
+ 
+ #ifdef CONFIG_HUAWEI_DUBAI
+diff --git a/kernel/signal.c b/kernel/signal.c
+index 7be8f9d..d6c83b7 100644
+--- a/kernel/signal.c
++++ b/kernel/signal.c
+@@ -43,6 +43,10 @@
+ #include <asm/unistd.h>
+ #include <asm/siginfo.h>
+ #include <asm/cacheflush.h>
++#ifdef CONFIG_REKERNEL
++#include <uapi/asm/signal.h>
++#include "../drivers/rekernel/rekernel.h"
++#endif
+ #include "audit.h"	/* audit_signal_info() */
+ 
+ #ifdef CONFIG_HUAWEI_KSTATE
+@@ -1174,6 +1178,11 @@ int do_send_sig_info(int sig, struct siginfo *info, struct task_struct *p,
+ {
+ 	unsigned long flags;
+ 	int ret = -ESRCH;
++#ifdef CONFIG_REKERNEL
++	if (sig == SIGKILL || sig == SIGTERM || sig == SIGABRT || sig == SIGQUIT)
++		rekernel_report(SIGNAL, sig, task_tgid_nr(current), current,
++				task_tgid_nr(p), p, false, NULL);
++#endif
+ 
+ #ifdef CONFIG_HUAWEI_KSTATE
+ 	if (sig == SIGKILL || sig == SIGTERM || sig == SIGABRT || sig == SIGQUIT)

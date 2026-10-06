@@ -5,7 +5,7 @@ image_gz="${1:?usage: $0 Image.gz OUTPUT.img [MKBOOTIMG]}"
 output="${2:?usage: $0 Image.gz OUTPUT.img [MKBOOTIMG]}"
 mkbootimg="${3:-${MKBOOTIMG:-}}"
 partition_size=25165824
-stock_cmdline='loglevel=4 initcall_debug=n page_tracker=on unmovable_isolate1=2:192M,3:224M,4:256M printktimer=0xfff0a000,0x534,0x538 androidboot.selinux=enforcing buildvariant=user'
+stock_cmdline='loglevel=4 initcall_debug=n page_tracker=on unmovable_isolate1=2:192M,3:224M,4:256M printktimer=0xfff0a000,0x534,0x538 androidboot.selinux=enforcing enforcing=1 buildvariant=user'
 
 die() {
   printf '%s\n' "$*" >&2
@@ -35,6 +35,7 @@ mkdir -p "$(dirname "$output")"
   --os_patch_level 2019-04-01 \
   --output "$output"
 
+[ "$(stat -c %s "$output")" -le "$partition_size" ] || die 'packaged image exceeds the PAR kernel partition'
 [ "$(head -c 8 "$output")" = 'ANDROID!' ] || die 'packaged image has no Android boot header'
 packed_size="$(od -An -tu4 -j8 -N4 "$output" | tr -d ' ')"
 [ "$packed_size" = "$kernel_size" ] || die 'packaged kernel_size does not match Image.gz'

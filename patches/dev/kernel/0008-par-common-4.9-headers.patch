@@ -1,0 +1,85 @@
+diff --git a/include/linux/compiler_types.h b/include/linux/compiler_types.h
+new file mode 100644
+index 000000000..d3467edd7
+--- /dev/null
++++ b/include/linux/compiler_types.h
+@@ -0,0 +1,6 @@
++#ifndef __LINUX_COMPILER_TYPES_H
++#define __LINUX_COMPILER_TYPES_H
++
++#include <linux/compiler.h>
++
++#endif
+diff --git a/include/linux/minmax.h b/include/linux/minmax.h
+new file mode 100644
+index 000000000..55a4be68e
+--- /dev/null
++++ b/include/linux/minmax.h
+@@ -0,0 +1,6 @@
++#ifndef _LINUX_MINMAX_H
++#define _LINUX_MINMAX_H
++
++#include <linux/kernel.h>
++
++#endif
+diff --git a/include/linux/pgtable.h b/include/linux/pgtable.h
+new file mode 100644
+index 000000000..b7d2049aa
+--- /dev/null
++++ b/include/linux/pgtable.h
+@@ -0,0 +1,6 @@
++#ifndef _LINUX_PGTABLE_H
++#define _LINUX_PGTABLE_H
++
++#include <asm/pgtable.h>
++
++#endif
+diff --git a/include/linux/sched/signal.h b/include/linux/sched/signal.h
+new file mode 100644
+index 000000000..37c542d02
+--- /dev/null
++++ b/include/linux/sched/signal.h
+@@ -0,0 +1,7 @@
++#ifndef _LINUX_SCHED_SIGNAL_H
++#define _LINUX_SCHED_SIGNAL_H
++
++#include <linux/sched.h>
++#include <linux/signal.h>
++
++#endif
+diff --git a/include/linux/sched/task.h b/include/linux/sched/task.h
+new file mode 100644
+index 000000000..3db3de9e8
+--- /dev/null
++++ b/include/linux/sched/task.h
+@@ -0,0 +1,6 @@
++#ifndef _LINUX_SCHED_TASK_H
++#define _LINUX_SCHED_TASK_H
++
++#include <linux/sched.h>
++
++#endif
+diff --git a/include/linux/sched/task_stack.h b/include/linux/sched/task_stack.h
+new file mode 100644
+index 000000000..4497dd0fd
+--- /dev/null
++++ b/include/linux/sched/task_stack.h
+@@ -0,0 +1,6 @@
++#ifndef _LINUX_SCHED_TASK_STACK_H
++#define _LINUX_SCHED_TASK_STACK_H
++
++#include <linux/sched.h>
++
++#endif
+diff --git a/include/linux/sched/user.h b/include/linux/sched/user.h
+new file mode 100644
+index 000000000..d5a9ebc23
+--- /dev/null
++++ b/include/linux/sched/user.h
+@@ -0,0 +1,6 @@
++#ifndef _LINUX_SCHED_USER_H
++#define _LINUX_SCHED_USER_H
++
++#include <linux/sched.h>
++
++#endif
